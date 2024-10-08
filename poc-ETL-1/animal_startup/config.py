@@ -1,0 +1,3 @@
+API_BASE_URL = "http://localhost:3123"
+MAX_BATCH_SIZE = 100
+RETRY_LIMIT = 5
