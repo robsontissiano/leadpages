@@ -4,7 +4,6 @@ import datetime
 import logging
 from typing import List, Optional
 from pydantic import BaseModel
-import time
 import random
 
 # Setup logging
@@ -13,7 +12,7 @@ logging.basicConfig(filename='animal_loader.log', level=logging.INFO, format='%(
 # Constants
 BASE_URL = 'http://localhost:3123/animals/v1'
 MAX_BATCH_SIZE = 100
-RETRY_WAIT_TIME = [3, 30]  # Random delay between 5 and 15 seconds for retries
+RETRY_WAIT_TIME = [3, 30]  # Random delay between 3 and 30 seconds for retries
 MAX_RETRIES = 5  # Maximum retry attempts for 500-504 errors
 
 # Pydantic models to structure the animal data
@@ -29,33 +28,58 @@ class TransformedAnimal(BaseModel):
     born_at: Optional[datetime.datetime]
     friends: List[str]
 
-# Function to fetch animal data (paginated)
+# Function to fetch animal data (paginated) with retry logic
 async def fetch_animals():
     page = 1
     animals = []
     async with httpx.AsyncClient() as client:
         while True:
-            logging.info(f"Fetching animals on page {page}")
-            response = await client.get(f"{BASE_URL}/animals", params={'page': page})
-            response.raise_for_status()
-            data = response.json()
+            retries = 0
+            while retries < MAX_RETRIES:
+                try:
+                    logging.info(f"Fetching animals on page {page}")
+                    response = await client.get(f"{BASE_URL}/animals", params={'page': page})
+                    response.raise_for_status()
+                    data = response.json()
+                    animals.extend(data['items'])
 
-            # Append animals from current page
-            animals.extend(data['items'])
+                    # Break if all pages are fetched
+                    if page >= data['total_pages']:
+                        return animals
+                    page += 1
+                    break
 
-            # Break if all pages are fetched
-            if page >= data['total_pages']:
-                break
-            page += 1
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    if response.status_code in [500, 502, 503, 504]:
+                        retries += 1
+                        wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
+                        logging.warning(f"Error on page {page} with status {response.status_code}. "
+                                        f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logging.error(f"Failed to fetch animals on page {page} after {retries} retries: {exc}")
+                        return animals
 
-    return animals
-
-# Function to fetch detailed animal data by ID
+# Function to fetch detailed animal data by ID with retry logic
 async def fetch_animal_detail(animal_id: int):
+    retries = 0
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/animals/{animal_id}")
-        response.raise_for_status()
-        return AnimalDetail(**response.json())
+        while retries < MAX_RETRIES:
+            try:
+                logging.info(f"Fetching details for animal ID {animal_id}")
+                response = await client.get(f"{BASE_URL}/animals/{animal_id}")
+                response.raise_for_status()
+                return AnimalDetail(**response.json())
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                if response.status_code in [500, 502, 503, 504]:
+                    retries += 1
+                    wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
+                    logging.warning(f"Error fetching animal ID {animal_id} with status {response.status_code}. "
+                                    f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logging.error(f"Failed to fetch details for animal ID {animal_id} after {retries} retries: {exc}")
+                    return None
 
 # Transform the animal data
 def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
@@ -107,8 +131,9 @@ async def main():
         all_transformed_animals = []
         for animal in animals:
             animal_detail = await fetch_animal_detail(animal['id'])
-            transformed_animal = transform_animal(animal_detail)
-            all_transformed_animals.append(transformed_animal)
+            if animal_detail:
+                transformed_animal = transform_animal(animal_detail)
+                all_transformed_animals.append(transformed_animal)
 
         # Step 3: Post in batches of 100
         for i in range(0, len(all_transformed_animals), MAX_BATCH_SIZE):
