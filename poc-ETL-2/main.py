@@ -79,7 +79,7 @@ async def fetch_animal_detail(animal_id: int):
                 response.raise_for_status()  # Raise exception for HTTP error codes
                 return AnimalDetail(**response.json())  # Return the animal detail if successful
 
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except (httpx.HTTPStatusError, httpx.ReadTimeout, httpx.RequestError) as exc:
                 if isinstance(exc, httpx.ReadTimeout):
                     logging.error(f"ReadTimeout occurred while fetching animal ID {animal_id}: {exc}")
                 else:
@@ -101,7 +101,6 @@ async def fetch_animal_detail(animal_id: int):
                     logging.error(f"Unrecoverable error or no response available for animal ID {animal_id}. "
                                   f"Details: {traceback.format_exc()}")
                     return None
-
 
 # Transform the animal data
 def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
