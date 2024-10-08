@@ -2,6 +2,7 @@ import httpx
 import asyncio
 import datetime
 import logging
+import traceback
 from typing import List, Optional
 from pydantic import BaseModel
 import random
@@ -57,7 +58,9 @@ async def fetch_animals():
                                         f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
                         await asyncio.sleep(wait_time)
                     else:
-                        logging.error(f"Failed to fetch animals on page {page} after {retries} retries: {exc}")
+                        logging.error(f"Failed to fetch animals on page {page} after {retries} retries.")
+                        logging.error(f"Exception details: {exc}")
+                        logging.error(traceback.format_exc())
                         return animals
 
 # Function to fetch detailed animal data by ID with retry logic
@@ -78,7 +81,9 @@ async def fetch_animal_detail(animal_id: int):
                                     f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
                     await asyncio.sleep(wait_time)
                 else:
-                    logging.error(f"Failed to fetch details for animal ID {animal_id} after {retries} retries: {exc}")
+                    logging.error(f"Failed to fetch details for animal ID {animal_id} after {retries} retries.")
+                    logging.error(f"Exception details: {exc}")
+                    logging.error(traceback.format_exc())
                     return None
 
 # Transform the animal data
@@ -117,7 +122,9 @@ async def post_animals_batch(animals_batch: List[TransformedAnimal]):
                     logging.warning(f"Server error ({exc}). Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
                     await asyncio.sleep(wait_time)
                 else:
-                    logging.error(f"Failed to post batch after {retries} retries: {exc}")
+                    logging.error(f"Failed to post batch after {retries} retries.")
+                    logging.error(f"Exception details: {exc}")
+                    logging.error(traceback.format_exc())
                     return
 
 # Main function to orchestrate the ETL process
@@ -141,7 +148,8 @@ async def main():
             await post_animals_batch(batch)
 
     except Exception as e:
-        logging.error(f"Error occurred: {str(e)}")
+        logging.error(f"Unhandled error occurred: {str(e)}")
+        logging.error(traceback.format_exc())
 
 # Run the ETL process
 if __name__ == "__main__":
