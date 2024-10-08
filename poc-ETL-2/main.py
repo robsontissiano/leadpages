@@ -116,14 +116,18 @@ def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
         friends=friends_list
     )
 
-# Function to post batch of animals
+# Function to post batch of animals using Pydantic .json()
 async def post_animals_batch(animals_batch: List[TransformedAnimal]):
     async with httpx.AsyncClient() as client:
         retries = 0
         while retries < MAX_RETRIES:
             try:
                 logging.info(f"Posting batch of {len(animals_batch)} animals")
-                response = await client.post(f"{BASE_URL}/home", json=[animal.dict() for animal in animals_batch])
+
+                # Use Pydantic's .json() method to serialize data with datetime support
+                json_data = [animal.json() for animal in animals_batch]
+
+                response = await client.post(f"{BASE_URL}/home", data=json_data)
                 response.raise_for_status()
                 logging.info(f"Successfully posted batch: {response.json()}")
                 return
