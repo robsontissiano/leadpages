@@ -38,7 +38,7 @@ async def fetch_animals():
             retries = 0
             while retries < MAX_RETRIES:
                 try:
-                    logging.info(f"Fetching animals on page {page}")
+                    logging.info(f"####### Fetching animals on page {page}")
                     response = await client.get(f"{BASE_URL}/animals", params={'page': page})
                     response.raise_for_status()
                     data = response.json()
@@ -71,20 +71,32 @@ async def fetch_animal_detail(animal_id: int):
             try:
                 logging.info(f"Fetching details for animal ID {animal_id}")
                 response = await client.get(f"{BASE_URL}/animals/{animal_id}")
-                response.raise_for_status()
-                return AnimalDetail(**response.json())
+                response.raise_for_status()  # Raise exception for HTTP error codes
+                return AnimalDetail(**response.json())  # Return the animal detail if successful
+
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if response.status_code in [500, 502, 503, 504]:
-                    retries += 1
-                    wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
-                    logging.warning(f"Error fetching animal ID {animal_id} with status {response.status_code}. "
-                                    f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
-                    await asyncio.sleep(wait_time)
+                if isinstance(exc, httpx.ReadTimeout):
+                    logging.error(f"ReadTimeout occurred while fetching animal ID {animal_id}: {exc}")
                 else:
-                    logging.error(f"Failed to fetch details for animal ID {animal_id} after {retries} retries.")
-                    logging.error(f"Exception details: {exc}")
-                    logging.error(traceback.format_exc())
+                    logging.error(f"Error fetching animal ID {animal_id}: {exc}")
+
+                if hasattr(exc, 'response') and exc.response is not None:
+                    status_code = exc.response.status_code
+                    if status_code in [500, 502, 503, 504]:
+                        retries += 1
+                        wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
+                        logging.warning(f"Error fetching animal ID {animal_id} with status {status_code}. "
+                                        f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logging.error(f"Failed to fetch details for animal ID {animal_id} after {retries} retries.")
+                        logging.error(traceback.format_exc())
+                        return None
+                else:
+                    logging.error(f"Unrecoverable error or no response available for animal ID {animal_id}. "
+                                  f"Details: {traceback.format_exc()}")
                     return None
+
 
 # Transform the animal data
 def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
