@@ -51,12 +51,13 @@ async def fetch_animals():
                     break
 
                 except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                    if response.status_code in [500, 502, 503, 504]:
-                        retries += 1
-                        wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
-                        logging.warning(f"Error on page {page} with status {response.status_code}. "
-                                        f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
-                        await asyncio.sleep(wait_time)
+                    if hasattr(exc, 'response') and exc.response is not None:
+                        if exc.response.status_code in [500, 502, 503, 504]:
+                            retries += 1
+                            wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
+                            logging.warning(f"Error on page {page} with status {exc.response.status_code}. "
+                                            f"Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
+                            await asyncio.sleep(wait_time)
                     else:
                         logging.error(f"Failed to fetch animals on page {page} after {retries} retries.")
                         logging.error(f"Exception details: {exc}")
@@ -127,15 +128,16 @@ async def post_animals_batch(animals_batch: List[TransformedAnimal]):
                 # Use Pydantic's .json() method to serialize data with datetime support
                 json_data = [animal.json() for animal in animals_batch]
 
-                response = await client.post(f"{BASE_URL}/home", data=json_data)
+                response = await client.post(f"{BASE_URL}/home", json=json_data)  # Fix: Use "json=" for async requests
                 response.raise_for_status()
                 logging.info(f"Successfully posted batch: {response.json()}")
                 return
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if response.status_code in [500, 502, 503, 504]:
+                if hasattr(exc, 'response') and exc.response is not None and exc.response.status_code in [500, 502, 503, 504]:
                     retries += 1
                     wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
-                    logging.warning(f"Server error ({exc}). Retrying in {wait_time} seconds (Attempt {retries}/{MAX_RETRIES})")
+                    logging.warning(f"Server error ({exc.response.status_code}). Retrying in {wait_time} seconds "
+                                    f"(Attempt {retries}/{MAX_RETRIES})")
                     await asyncio.sleep(wait_time)
                 else:
                     logging.error(f"Failed to post batch after {retries} retries.")
