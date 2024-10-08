@@ -6,6 +6,7 @@ import traceback
 from typing import List, Optional
 from pydantic import BaseModel
 import random
+from concurrent.futures import ThreadPoolExecutor
 
 # Setup logging
 logging.basicConfig(filename='animal_loader.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,6 +16,9 @@ BASE_URL = 'http://localhost:3123/animals/v1'
 MAX_BATCH_SIZE = 100
 RETRY_WAIT_TIME = [3, 30]  # Random delay between 3 and 30 seconds for retries
 MAX_RETRIES = 5  # Maximum retry attempts for 500-504 errors
+
+# ThreadPoolExecutor for parallel processing of failed requests
+executor = ThreadPoolExecutor(max_workers=10)
 
 # Pydantic models to structure the animal data
 class AnimalDetail(BaseModel):
@@ -26,8 +30,8 @@ class AnimalDetail(BaseModel):
 class TransformedAnimal(BaseModel):
     id: int
     name: str
-    born_at: Optional[datetime.datetime]
-    friends: List[str]
+    born_at: Optional[str]  # Must be a string in ISO8601 format for correct serialization
+    friends: List[str]  # Should be a list of strings, not a single string
 
 # Function to fetch animal data (paginated) with retry logic
 async def fetch_animals():
@@ -104,11 +108,10 @@ def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
     # Transform friends into a list
     friends_list = animal_detail.friends.split(",") if animal_detail.friends else []
 
-    # Convert born_at to ISO8601 UTC
+    # Convert born_at to ISO8601 UTC if present
+    born_at_utc = None
     if animal_detail.born_at:
         born_at_utc = datetime.datetime.utcfromtimestamp(animal_detail.born_at / 1000).isoformat() + "Z"
-    else:
-        born_at_utc = None
 
     return TransformedAnimal(
         id=animal_detail.id,
@@ -117,7 +120,11 @@ def transform_animal(animal_detail: AnimalDetail) -> TransformedAnimal:
         friends=friends_list
     )
 
-# Function to post batch of animals using Pydantic .json()
+# Function to handle retries for 500 errors in a separate thread
+def retry_failed_post(batch: List[TransformedAnimal]):
+    asyncio.run(post_animals_batch(batch))
+
+# Function to post batch of animals using Pydantic .json() and retry on 500-series errors
 async def post_animals_batch(animals_batch: List[TransformedAnimal]):
     async with httpx.AsyncClient() as client:
         retries = 0
@@ -126,24 +133,31 @@ async def post_animals_batch(animals_batch: List[TransformedAnimal]):
                 logging.info(f"Posting batch of {len(animals_batch)} animals")
 
                 # Use Pydantic's .json() method to serialize data with datetime support
-                json_data = [animal.json() for animal in animals_batch]
+                json_data = [animal.dict() for animal in animals_batch]
 
                 response = await client.post(f"{BASE_URL}/home", json=json_data)  # Fix: Use "json=" for async requests
                 response.raise_for_status()
                 logging.info(f"Successfully posted batch: {response.json()}")
                 return
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if hasattr(exc, 'response') and exc.response is not None and exc.response.status_code in [500, 502, 503, 504]:
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 422:
+                    logging.error(f"Unprocessable Entity (422) error: {exc.response.text}")
+                    break
+                elif exc.response.status_code in [500, 502, 503, 504]:
                     retries += 1
-                    wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
-                    logging.warning(f"Server error ({exc.response.status_code}). Retrying in {wait_time} seconds "
-                                    f"(Attempt {retries}/{MAX_RETRIES})")
-                    await asyncio.sleep(wait_time)
-                else:
-                    logging.error(f"Failed to post batch after {retries} retries.")
-                    logging.error(f"Exception details: {exc}")
-                    logging.error(traceback.format_exc())
-                    return
+                    if retries < MAX_RETRIES:
+                        wait_time = random.randint(RETRY_WAIT_TIME[0], RETRY_WAIT_TIME[1])
+                        logging.warning(f"Server error ({exc.response.status_code}). Retrying in {wait_time} seconds "
+                                        f"(Attempt {retries}/{MAX_RETRIES})")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logging.error(f"Exceeded maximum retries for batch. Offloading retry to a separate thread.")
+                        executor.submit(retry_failed_post, animals_batch)
+                        return
+            except Exception as e:
+                logging.error(f"Failed to post batch after {retries} retries. Exception: {e}")
+                logging.error(traceback.format_exc())
+                return
 
 # Main function to orchestrate the ETL process
 async def main():
