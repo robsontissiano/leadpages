@@ -106,6 +106,12 @@ Sample log entry:
 2024-10-08 14:33:15 - WARNING - Server error (HTTPStatusError: 500 Server Error). Retrying in 7 seconds (Attempt 1/5)
 ```
 
+The logs are being updated in "realtime" after every item read, and after push every 100 animals. The logs display the results page read, the items ids updated and when a failure happens and it is being worked in the background. In case it fails after the max retries it will log the error found.
+
+To read it in realtime when running the program one can open a new terminal in the root folder and use the command below:
+    ```
+    tail -f animal_loader.log
+    ```
 
 ## Formatting and correcting lint errors with black library:
 ```bash
