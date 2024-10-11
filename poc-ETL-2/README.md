@@ -2,6 +2,13 @@
 
 This project is an ETL (Extract, Transform, Load) system for fetching, transforming, and loading animal data from an API. The system fetches animal data from paginated endpoints, transforms certain fields, and then loads the data in batches to another API endpoint.
 
+The program might take up to 15 minutes to conclude all reads and updates. It wil read all 591 pages and update around 5900 animals and retry when facing 5XX errors, in this case, It is used threads to keep running the retries in the background and keep reading the next pages.
+
+MAX_BATCH_SIZE: Value of chunks of items (animals) to be sent after Data transformation
+RETRY_WAIT_TIME: Random delay between 3 and 30 seconds for retries (it could be set a fixed number.)
+MAX_RETRIES: Maximum retry attempts for 500-504 errors
+executor: ThreadPoolExecutor(max_workers=10) - ThreadPoolExecutor for parallel processing of failed requests
+
 ## Table of Contents
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -97,4 +104,10 @@ Sample log entry:
 2024-10-08 14:32:45 - INFO - Fetching animals on page 1
 2024-10-08 14:32:47 - INFO - Successfully posted batch: {'message': 'Helped 100 find home'}
 2024-10-08 14:33:15 - WARNING - Server error (HTTPStatusError: 500 Server Error). Retrying in 7 seconds (Attempt 1/5)
+```
+
+
+## Formatting and correcting lint errors with black library:
+```bash
+python -m black main.py
 ```
