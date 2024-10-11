@@ -128,4 +128,5 @@ The tests will mock the httpx requests using pytest-httpx, ensuring that no real
 * Testing Coverage
 - test_fetch_animal_detail: Tests the fetch_animal_detail function, including retries for server errors.
 - test_transform_animal: Tests the transform_animal function to ensure it converts data correctly.
+- test_fetch_animal_detail_500_retry: Tests the fetch_animal_detail function's behavior when encountering multiple server errors (HTTP 500). It ensures that the function retries the specified number of times (max_retries), and returns None when all retries are exhausted. Also verifies that the correct number of requests are made during the retry process.
 - test_post_animals_batch: Mocks posting a batch of transformed animals and ensures the function retries on server errors.

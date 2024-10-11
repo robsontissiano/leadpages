@@ -58,6 +58,26 @@ def test_transform_animal():
 
 
 @pytest.mark.asyncio
+async def test_fetch_animal_detail_500_retry(httpx_mock: HTTPXMock):
+    animal_id = 1
+    url = f"http://localhost:3123/animals/v1/animals/{animal_id}"
+    max_retries = 5  # This corresponds to the MAX_RETRIES value in the base code
+
+    # Register the 500 response for max_retries
+    for _ in range(max_retries):
+        httpx_mock.add_response(method="GET", url=url, status_code=500, json={})
+
+    # Call the function that triggers retries
+    result = await fetch_animal_detail(animal_id)
+
+    # Since the retries exceeded, the function should return None
+    assert result is None
+
+    # Ensure that the number of requests matches the max_retries
+    assert len(httpx_mock.get_requests()) == max_retries
+
+
+@pytest.mark.asyncio
 async def test_post_animals_batch(httpx_mock: HTTPXMock):
     url = "http://localhost:3123/animals/v1/home"
     transformed_animals = [
