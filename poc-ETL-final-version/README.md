@@ -126,6 +126,6 @@ pytest
 The tests will mock the httpx requests using pytest-httpx, ensuring that no real HTTP calls are made during testing. This ensures a fast and isolated test environment.
 
 * Testing Coverage
-test_fetch_animal_detail: Tests the fetch_animal_detail function, including retries for server errors.
-test_transform_animal: Tests the transform_animal function to ensure it converts data correctly.
-test_post_animals_batch: Mocks posting a batch of transformed animals and ensures the function retries on server errors.
+- test_fetch_animal_detail: Tests the fetch_animal_detail function, including retries for server errors.
+- test_transform_animal: Tests the transform_animal function to ensure it converts data correctly.
+- test_post_animals_batch: Mocks posting a batch of transformed animals and ensures the function retries on server errors.
